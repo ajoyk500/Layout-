@@ -1,0 +1,87 @@
+name: Build LayoutEditor APK
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+
+      # ── 1. Repo checkout ──────────────────────────────────────────────
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # ── 2. Zip extract karo (LayoutEditor-main/ folder banega) ────────
+      - name: Extract project zip
+        run: |
+          unzip LayoutEditor_with_DesignTools.zip
+          echo "=== Extracted structure ==="
+          ls -la LayoutEditor-main/
+
+      # ── 3. Java 17 setup ──────────────────────────────────────────────
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+          cache: gradle
+
+      # ── 4. Android SDK (compileSdk = 36) ──────────────────────────────
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install SDK components
+        run: |
+          sdkmanager --install \
+            "platforms;android-36" \
+            "build-tools;36.0.0" \
+            "platform-tools"
+
+      # ── 5. Gradle permission ──────────────────────────────────────────
+      - name: Grant execute permission for gradlew
+        working-directory: LayoutEditor-main
+        run: chmod +x gradlew
+
+      # ── 6. Gradle cache ───────────────────────────────────────────────
+      - name: Cache Gradle packages
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: ${{ runner.os }}-gradle-${{ hashFiles('LayoutEditor-main/**/*.gradle*', 'LayoutEditor-main/**/libs.versions.toml') }}
+          restore-keys: |
+            ${{ runner.os }}-gradle-
+
+      # ── 7. Build Debug APK ────────────────────────────────────────────
+      - name: Build Debug APK
+        working-directory: LayoutEditor-main
+        run: ./gradlew assembleDebug --stacktrace --no-daemon
+
+      # ── 8. Upload Debug APK ───────────────────────────────────────────
+      - name: Upload Debug APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: LayoutEditor-debug-${{ github.run_number }}
+          path: LayoutEditor-main/app/build/outputs/apk/debug/app-debug.apk
+          retention-days: 7
+
+      # ── 9. Build Release APK (unsigned) ───────────────────────────────
+      - name: Build Release APK (unsigned)
+        working-directory: LayoutEditor-main
+        run: ./gradlew assembleRelease --stacktrace --no-daemon
+
+      # ── 10. Upload Release APK ────────────────────────────────────────
+      - name: Upload Release APK (unsigned)
+        uses: actions/upload-artifact@v4
+        with:
+          name: LayoutEditor-release-unsigned-${{ github.run_number }}
+          path: LayoutEditor-main/app/build/outputs/apk/release/app-release-unsigned.apk
+          retention-days: 7
+          
